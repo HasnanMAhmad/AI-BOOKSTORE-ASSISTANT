@@ -23,6 +23,15 @@ load_dotenv()
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "app_config.json")
 
 def get_persisted_key():
+    # 1. Check Streamlit Cloud Secrets (when deployed to share.streamlit.io)
+    try:
+        cloud_key = st.secrets.get("GEMINI_API_KEY", "").strip()
+        if cloud_key:
+            return cloud_key
+    except Exception:
+        pass
+
+    # 2. Check local app_config.json (when running locally)
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -32,6 +41,8 @@ def get_persisted_key():
                     return k
         except Exception:
             pass
+
+    # 3. Fall back to environment variable
     return os.environ.get("GEMINI_API_KEY", "").strip()
 
 def persist_api_key(key):
