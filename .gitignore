@@ -1,0 +1,25 @@
+# Environment and API keys (CRITICAL: Do not upload secrets)
+.env
+app_config.json
+*.key
+*.pem
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.pytest_cache/
+.venv/
+venv/
+ENV/
+
+# Large binaries & cache
+*.pkl
+catalog_embeddings.pkl
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
