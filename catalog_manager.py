@@ -15,7 +15,6 @@ import pickle
 import requests
 import numpy as np
 from PIL import Image, ImageEnhance
-import torch
 
 BASE_DIR = os.path.dirname(__file__)
 CATALOG_DIR = os.path.join(BASE_DIR, "catalog")
@@ -83,68 +82,29 @@ def add_book_to_catalog(title, author, series="", series_part="Standalone", syno
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write(dossier)
 
+    # Save directly to SQLite database
+    book_record = {
+        "id": b_id,
+        "title": title,
+        "author": author,
+        "series": series or "Standalone",
+        "series_part": series_part or "Volume 1",
+        "series_order": 99,
+        "universe_category": "Literature",
+        "year": 2024,
+        "preceded_by": "None",
+        "followed_by": "None",
+        "dossier": dossier,
+        "image_path": primary_cover if os.path.exists(primary_cover) else "",
+    }
+    
+    import book_database as db
+    db.upsert_book(book_record)
+
     if vision_matcher is not None:
         try:
-            model = vision_matcher.model
-            exemplar_embs = []
-            for img_path in (downloaded or [primary_cover]):
-                if os.path.exists(img_path):
-                    try:
-                        base_img = Image.open(img_path).convert("RGB")
-                        with torch.inference_mode():
-                            emb = model.encode([base_img], convert_to_numpy=True, normalize_embeddings=True)[0]
-                            exemplar_embs.append(emb)
-                        for factor in [0.75, 1.25]:
-                            enh = ImageEnhance.Brightness(base_img).enhance(factor)
-                            with torch.inference_mode():
-                                emb = model.encode([enh], convert_to_numpy=True, normalize_embeddings=True)[0]
-                                exemplar_embs.append(emb)
-                    except Exception:
-                        pass
-
-            if not exemplar_embs:
-                dummy = Image.new("RGB", (224, 224), color=(70, 70, 70))
-                with torch.inference_mode():
-                    exemplar_embs.append(model.encode([dummy], convert_to_numpy=True, normalize_embeddings=True)[0])
-
-            text_prompts = [
-                f"Book cover of {title} by {author}",
-                f"{title} written by {author}",
-                f"{title}",
-            ]
-            with torch.inference_mode():
-                text_embs = model.encode(text_prompts, convert_to_numpy=True, normalize_embeddings=True)
-
-            meta = {
-                "title": title,
-                "author": author,
-                "series": series or "Standalone",
-                "series_part": series_part or "Volume 1",
-                "series_order": 99,
-                "universe_category": "Literature",
-                "year": 2024,
-                "preceded_by": "None",
-                "followed_by": "None",
-            }
-
-            if os.path.exists(CACHE_FILE):
-                with open(CACHE_FILE, "rb") as f:
-                    bundle = pickle.load(f)
-            else:
-                bundle = {"books_meta": {}, "visual_exemplars": {}, "text_prototypes": {}}
-
-            bundle["books_meta"][b_id] = meta
-            bundle["visual_exemplars"][b_id] = np.array(exemplar_embs)
-            bundle["text_prototypes"][b_id] = text_embs
-            bundle["total_books"] = len(bundle["books_meta"])
-            bundle["total_exemplars"] = sum(len(ex) for ex in bundle["visual_exemplars"].values())
-
-            with open(CACHE_FILE, "wb") as f:
-                pickle.dump(bundle, f)
-
             vision_matcher.build_or_load_index(force_rebuild=True)
-            return True, f"Successfully added '{title}' with {len(exemplar_embs)} visual exemplars!"
-        except Exception as e:
-            return False, str(e)
-            
-    return True, f"Book saved for '{title}'."
+        except Exception:
+            pass
+
+    return True, f"Successfully indexed '{title}' into bookstore database!"

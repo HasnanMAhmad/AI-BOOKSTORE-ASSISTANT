@@ -177,5 +177,57 @@ def set_cached_match(image_hash, book_id, confidence_pct, engine="cloud", detail
     conn.commit()
     conn.close()
 
+def upsert_book(book_dict):
+    """Inserts or updates a book in the SQLite database."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+    INSERT OR REPLACE INTO books 
+    (id, title, author, year, series, series_part, series_order, universe_category, preceded_by, followed_by, dossier, image_path, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        book_dict["id"],
+        book_dict["title"],
+        book_dict.get("author", "Unknown"),
+        book_dict.get("year", 2024),
+        book_dict.get("series", "Standalone"),
+        book_dict.get("series_part", "Standalone"),
+        book_dict.get("series_order", 99),
+        book_dict.get("universe_category", "General"),
+        book_dict.get("preceded_by", "None"),
+        book_dict.get("followed_by", "None"),
+        book_dict.get("dossier", ""),
+        book_dict.get("image_path", ""),
+        time.time()
+    ))
+    conn.commit()
+    conn.close()
+
+def delete_book(book_id):
+    """Deletes a book and its cached matches from SQLite."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM match_cache WHERE book_id = ?", (book_id,))
+    cur.execute("DELETE FROM books WHERE id = ?", (book_id,))
+    conn.commit()
+    conn.close()
+
+def clear_match_cache():
+    """Wipes all cached image match results."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM match_cache;")
+    conn.commit()
+    conn.close()
+
+def get_cache_count():
+    """Counts entries in match_cache."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM match_cache;")
+    cnt = cur.fetchone()[0]
+    conn.close()
+    return cnt
+
 # Auto-initialize on import
 init_db(os.path.join(os.path.dirname(__file__), "catalog"))
