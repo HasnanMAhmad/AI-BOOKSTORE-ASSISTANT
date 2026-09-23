@@ -1,6 +1,6 @@
 """
 Streamlit Web Application: Alexandria AI Bookstore Assistant
-Multimodal 4-Layer Book Recognition & Literary Concierge with Secure Admin Portal.
+Multimodal Book Recognition & Literary Concierge with Secure Admin Portal.
 """
 
 import os
@@ -22,6 +22,7 @@ import catalog_manager
 load_dotenv()
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "app_config.json")
+BASE_DIR = os.path.dirname(__file__)
 
 # =====================================================================
 # CONFIGURATION & CREDENTIAL HELPERS (SECURE & HIDDEN FROM PUBLIC)
@@ -86,7 +87,7 @@ def set_admin_pin(new_pin):
 # STREAMLIT PAGE SETUP
 # =====================================================================
 st.set_page_config(
-    page_title="Alexandria AI • Bookstore Concierge",
+    page_title="Alexandria • Bookstore & Literary Guide",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -173,12 +174,24 @@ st.markdown("""
         box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.04);
         margin-bottom: 1.2rem;
     }
-    .dark-card {
-        background: #0F172A;
-        border: 1px solid #1E293B;
-        border-radius: 14px;
-        padding: 1.4rem;
-        color: #F8FAFC;
+
+    /* Scanner Viewfinder Area */
+    .scanner-viewfinder-card {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+        border: 2px dashed #818CF8;
+        border-radius: 16px;
+        padding: 1.2rem;
+        box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.06);
+        position: relative;
+    }
+    .scanner-header-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        color: #1E1B4B;
+        font-size: 1.05rem;
+        margin-bottom: 8px;
     }
 
     /* Match Quality Badges */
@@ -246,6 +259,31 @@ st.markdown("""
         margin: 12px 0;
     }
 
+    /* How It Works Steps */
+    .step-item {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 8px 0;
+    }
+    .step-icon {
+        background: #EEF2FF;
+        color: #4338CA;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.05rem;
+        flex-shrink: 0;
+    }
+    .step-text {
+        font-size: 0.88rem;
+        color: #475569;
+        line-height: 1.5;
+    }
+
     /* Tab navigation polish */
     .stTabs [data-baseweb="tab-list"] {
         gap: 10px;
@@ -307,19 +345,17 @@ if "match_result" not in st.session_state:
     st.session_state.match_result = None
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
-if "prefill_question" not in st.session_state:
-    st.session_state.prefill_question = None
+if "current_image_bytes" not in st.session_state:
+    st.session_state.current_image_bytes = None
 
 # =====================================================================
-# HERO BANNER
+# HERO BANNER (CLEAN & INVITING)
 # =====================================================================
-cloud_status_badge = "✨ 4-Layer Multimodal Vision • Zero-Lag Cache" if api_key else "⚡ High-Speed Local Vision Engine"
-
-st.markdown(f"""
+st.markdown("""
 <div class="hero-container">
-    <div class="hero-badge">{cloud_status_badge}</div>
-    <h1 class="hero-title">Alexandria AI Bookstore</h1>
-    <p class="hero-subtitle">Instant visual book identification, universe reading roadmaps, and live spoiler-free literary consultations powered by Multimodal AI.</p>
+    <div class="hero-badge">📖 In-Store Literary Concierge</div>
+    <h1 class="hero-title">Alexandria Bookstore</h1>
+    <p class="hero-subtitle">Point your camera at any book cover or explore our curated collections to discover its story, find where it fits in the series, and ask our concierge for spoiler-free reading advice.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -327,58 +363,120 @@ st.markdown(f"""
 # NAVIGATION TABS
 # =====================================================================
 tab_scanner, tab_catalog, tab_roadmaps, tab_admin = st.tabs([
-    "📷 Instant Book Scanner",
+    "📷 Scan a Book",
     "📚 Store Catalog & Inventory",
     "🗺️ Universe Roadmaps",
     "🔐 Staff & Admin Portal"
 ])
 
 # =====================================================================
-# TAB 1: INSTANT BOOK SCANNER (CLEAN, ZERO-KEY INTERFACE)
+# TAB 1: SCAN A BOOK (CLEAN, INTERESTING & INTERACTIVE)
 # =====================================================================
 with tab_scanner:
-    col_upload_pane, col_guide_pane = st.columns([1.6, 1.4])
+    col_scanner_pane, col_interactive_pane = st.columns([1.6, 1.4])
 
-    with col_upload_pane:
-        st.markdown("#### 📸 Point Camera or Upload Cover")
-        scan_mode = st.radio(
-            "Scan Source:",
-            ["📱 Smartphone Camera / Photo File", "💻 Laptop Webcam"],
-            horizontal=True,
-            label_visibility="collapsed"
-        )
+    with col_scanner_pane:
+        st.markdown("""
+        <div class="scanner-header-bar">
+            <span>📸</span> Scan or Upload Book Cover
+        </div>
+        """, unsafe_allow_html=True)
+
+        scan_subtab_mobile, scan_subtab_file, scan_subtab_cam = st.tabs([
+            "📱 Phone Camera (Snap Live)",
+            "📁 Upload Image File",
+            "💻 Laptop Webcam"
+        ])
 
         image_source = None
-        if "Smartphone" in scan_mode:
-            st.caption("💡 On mobile: Tap **Browse files** $\\rightarrow$ select **Camera** to snap a live photo!")
-            file_img = st.file_uploader(
-                "Upload cover photo:",
-                type=["jpg", "jpeg", "png", "webp"],
-                key="user_cover_file",
-                help="Accepts JPG, PNG, WEBP. Auto-corrects mobile rotation & tilt."
-            )
-            image_source = file_img
-        else:
-            st.caption("💻 Webcams require `https://` or `localhost`. (For phones, use Camera / Photo File mode).")
-            cam_img = st.camera_input("Scan with webcam:", key="user_webcam")
-            image_source = cam_img
 
-    with col_guide_pane:
-        st.markdown("""
-        <div class="glass-card" style="margin-top: 10px;">
-            <div style="font-weight: 700; color: #1E1B4B; margin-bottom: 6px; font-size: 1rem;">
-                ⚡ 4-Layer Multimodal Recognition
+        with scan_subtab_mobile:
+            st.markdown("""
+            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 12px; margin-bottom: 10px; color: #166534; font-size: 0.88rem;">
+                <b>📱 How to snap on your phone:</b><br>
+                1. Tap <b>Browse files</b> below.<br>
+                2. Choose <b>Camera</b> from your phone's menu.<br>
+                3. Snap the book cover & tap the checkmark!
             </div>
-            <div style="color: #475569; font-size: 0.90rem; line-height: 1.6;">
-                • <b>Zero-QR Required:</b> Snap any cover angle, glare, or hand-held book.<br>
-                • <b>4-Layer Pipeline:</b> EXIF orientation auto-transpose $\\rightarrow$ Cloud metadata extraction $\\rightarrow$ Rapidfuzz catalog retrieval $\\rightarrow$ Visual verification pass.<br>
-                • <b>Instant SQLite Cache:</b> Re-scanned books identify in <b>0.001 seconds</b>.<br>
-                • <b>Spoiler-Free Concierge:</b> Ask pacing, themes, and reading order without spoiling endings.
+            """, unsafe_allow_html=True)
+            mob_img = st.file_uploader(
+                "Snap cover with phone camera:",
+                type=["jpg", "jpeg", "png", "webp"],
+                key="mob_shot",
+                label_visibility="collapsed"
+            )
+            if mob_img is not None:
+                image_source = mob_img
+
+        with scan_subtab_file:
+            st.caption("Drag and drop any picture of a book cover from your device:")
+            file_img = st.file_uploader(
+                "Upload cover file:",
+                type=["jpg", "jpeg", "png", "webp"],
+                key="file_shot",
+                label_visibility="collapsed"
+            )
+            if file_img is not None:
+                image_source = file_img
+
+        with scan_subtab_cam:
+            st.caption("💻 Webcams work directly on laptop browsers:")
+            cam_img = st.camera_input("Laptop webcam scanner:", key="cam_shot", label_visibility="collapsed")
+            if cam_img is not None:
+                image_source = cam_img
+
+    with col_interactive_pane:
+        st.markdown("""
+        <div class="glass-card" style="margin-bottom: 12px;">
+            <div style="font-weight: 700; color: #1E1B4B; margin-bottom: 8px; font-size: 1rem;">
+                ✨ How It Works
+            </div>
+            <div class="step-item">
+                <div class="step-icon">📸</div>
+                <div class="step-text"><b>1. Show Us Any Book</b><br>Snap the front cover from your shelf or hand — no barcodes needed.</div>
+            </div>
+            <div class="step-item">
+                <div class="step-icon">🔍</div>
+                <div class="step-text"><b>2. Instant Book Match</b><br>We'll find the exact edition, author, and series volume.</div>
+            </div>
+            <div class="step-item">
+                <div class="step-icon">🧙‍♂️</div>
+                <div class="step-text"><b>3. In-Store Concierge</b><br>Ask about pacing, character vibes, and reading order with zero spoilers.</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-    # Process Scanned Image
+        # Quick Try Sample Covers (Engaging & Fun for Testers/Users)
+        st.markdown("##### 🌟 Or Try a Sample Book:")
+        st.caption("Don't have a book handy? Click any title below to test instant recognition:")
+
+        sample_cols = st.columns(3)
+        sample_books = [
+            ("🪐 Dune", "dune.jpg"),
+            ("⚛️ Atomic Habits", "atomic_habits.jpg"),
+            ("🚀 Project Hail Mary", "project_hail_mary.jpg"),
+            ("🐉 Fourth Wing", "fourth_wing.jpg"),
+            ("🧙‍♂️ The Hobbit", "the_hobbit.jpg"),
+            ("⚔️ Hunters of Dune", "hunters_of_dune.jpg"),
+        ]
+
+        for s_idx, (b_label, b_file) in enumerate(sample_books):
+            col = sample_cols[s_idx % 3]
+            sample_path = os.path.join(BASE_DIR, "catalog", b_file)
+            if col.button(b_label, key=f"btn_sample_{s_idx}", use_container_width=True):
+                if os.path.exists(sample_path):
+                    with open(sample_path, "rb") as f:
+                        sample_bytes = f.read()
+                    st.session_state.current_image_bytes = sample_bytes
+                    st.session_state.last_image_hash = hashlib.md5(sample_bytes).hexdigest()
+                    with st.spinner(f"Examining cover for {b_label}..."):
+                        m_res = matcher.match_book(sample_bytes, api_key=api_key)
+                        st.session_state.match_result = m_res
+                        st.session_state.current_book = m_res.get("top_match")
+                        st.session_state.chat_history = []
+                    st.rerun()
+
+    # Process Scanned/Uploaded Image
     if image_source is not None:
         image_bytes = image_source.getvalue()
         img_sig = hashlib.md5(image_bytes).hexdigest()
@@ -386,7 +484,7 @@ with tab_scanner:
 
         if st.session_state.last_image_hash != img_sig:
             st.session_state.last_image_hash = img_sig
-            with st.spinner("⚡ Identifying cover through 4-Layer Recognition Pipeline..."):
+            with st.spinner("🔍 Reading book cover and checking store catalog..."):
                 match_result = matcher.match_book(image_bytes, api_key=api_key)
                 st.session_state.match_result = match_result
                 st.session_state.current_book = match_result.get("top_match")
@@ -403,7 +501,7 @@ with tab_scanner:
 
             with col_photo:
                 st.caption("📸 **Your Captured Photo**")
-                user_img_data = st.session_state.get("current_image_bytes") or image_source
+                user_img_data = st.session_state.get("current_image_bytes")
                 if user_img_data is not None:
                     try:
                         st.image(user_img_data, use_container_width=True)
@@ -419,11 +517,10 @@ with tab_scanner:
                         pass
 
             with col_meta:
-                conf = float(top.get("confidence_pct", 98.5))
                 speed = top.get("elapsed_sec", 0.05)
 
-                # Status Badges
-                badge_html = f'<span class="badge-pill badge-verified">🎯 {conf:.1f}% Match Verified</span> <span class="badge-pill badge-speed">⚡ {speed}s</span>'
+                # Elegant Badges (No confusing developer jargon)
+                badge_html = f'<span class="badge-pill badge-verified">✓ In Stock & Identified</span> <span class="badge-pill badge-speed">⚡ {speed}s</span>'
                 if top.get("series") and top.get("series") != "Standalone":
                     badge_html += f' <span class="badge-pill badge-universe">🪐 {top["series"]}</span>'
                 st.markdown(badge_html, unsafe_allow_html=True)
@@ -454,8 +551,9 @@ with tab_scanner:
                         for idx, cand in enumerate(candidates):
                             cand_id = cand.get("id") or cand.get("book_id", f"cand_{idx}")
                             if b_cols[idx].button(f"👉 Select {cand['title']}", key=f"sel_{cand_id}_{idx}"):
-                                matcher.learn_user_correction(image_bytes, cand_id)
-                                db.set_cached_match(img_sig, cand_id, 100.0, engine="user_corrected")
+                                if st.session_state.current_image_bytes:
+                                    matcher.learn_user_correction(st.session_state.current_image_bytes, cand_id)
+                                    db.set_cached_match(img_sig, cand_id, 100.0, engine="user_corrected")
                                 st.session_state.current_book = cand
                                 st.rerun()
 
@@ -517,12 +615,12 @@ with tab_scanner:
             extracted = match_result.get("extracted_meta") or match_result.get("extracted_metadata")
             if extracted:
                 st.info(
-                    f"**Detected details from cover (4-Layer Vision):**\n\n"
+                    f"**Detected details from book cover:**\n\n"
                     f"• **Title:** {extracted.get('title') or 'Unknown'}\n"
                     f"• **Author:** {extracted.get('author') or 'Unknown'}\n"
                     f"• **Volume / Edition:** {extracted.get('edition_or_volume') or 'N/A'}\n"
                     f"• **ISBN:** {extracted.get('isbn') or 'N/A'}\n\n"
-                    f"💡 *Staff members can index this book into the database via the **Staff & Admin Portal**!*"
+                    f"💡 *Store staff can easily index this book into the database via the **Staff & Admin Portal**!*"
                 )
 
 # =====================================================================
@@ -577,7 +675,7 @@ with tab_catalog:
                         st.session_state.chat_history = [
                             {"role": "assistant", "content": f"Welcome! You're inquiring about **{book['title']}** by {book['author']}. How can I assist your reading journey today without any spoilers?"}
                         ]
-                        st.success(f"Loaded '{book['title']}'! Switch to the 📷 Scanner tab to chat.")
+                        st.success(f"Loaded '{book['title']}'! Switch to the 📷 Scan a Book tab to chat.")
 
 # =====================================================================
 # TAB 3: UNIVERSE ROADMAPS & CHRONOLOGY
@@ -607,13 +705,13 @@ with tab_roadmaps:
                         st.session_state.chat_history = [
                             {"role": "assistant", "content": f"Ready to discuss **{b['title']}** (#{idx} in the Dune roadmap)! What would you like to know?"}
                         ]
-                        st.success("Loaded! Switch to 📷 Instant Scanner tab.")
+                        st.success("Loaded! Switch to 📷 Scan a Book tab.")
 
 # =====================================================================
-# TAB 4: STAFF & ADMIN PORTAL (SECURE GATEWAY)
+# TAB 4: STAFF & ADMIN PORTAL (SECURE GATEWAY & TECHNICAL ARCHITECTURE)
 # =====================================================================
 with tab_admin:
-    st.markdown("#### 🔐 Staff Administration & AI Controls")
+    st.markdown("#### 🔐 Staff Administration & System Controls")
     current_admin_pin = get_admin_pin()
 
     if not st.session_state.admin_authenticated:
@@ -622,7 +720,7 @@ with tab_admin:
             <div style="font-size: 2.2rem; margin-bottom: 10px;">🛡️</div>
             <div style="font-weight: 800; font-size: 1.25rem; color: #0F172A; margin-bottom: 6px;">Staff Authentication Required</div>
             <div style="color: #64748B; font-size: 0.9rem; margin-bottom: 18px;">
-                Enter your administrative PIN to access cloud key configurations, database cache controls, and inventory ingestion.
+                Enter your administrative PIN to access API key configurations, database controls, book ingestion, and technical pipeline architecture.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -649,10 +747,11 @@ with tab_admin:
 
         st.markdown("---")
 
-        adm_sub_ai, adm_sub_ingest, adm_sub_cache, adm_sub_sec = st.tabs([
+        adm_sub_ai, adm_sub_ingest, adm_sub_cache, adm_sub_arch, adm_sub_sec = st.tabs([
             "🔑 Cloud AI & API Keys",
             "➕ Ingest New Books",
             "⚡ Cache & Database",
+            "🏛️ Technical Architecture",
             "🛡️ Security & PIN"
         ])
 
@@ -694,7 +793,7 @@ with tab_admin:
         # SUBTAB B: INGEST NEW BOOKS
         with adm_sub_ingest:
             st.markdown("##### ➕ Universal Book Ingestion")
-            st.write("Enter any book title and author. The AI will search Open Library, retrieve covers, and index the title into SQLite in seconds.")
+            st.write("Enter any book title and author. The system will search Open Library, retrieve covers, and index the title into SQLite in seconds.")
 
             in_col1, in_col2 = st.columns(2)
             with in_col1:
@@ -735,7 +834,34 @@ with tab_admin:
                     st.success("Catalog index reloaded in 0.001s!")
                     st.rerun()
 
-        # SUBTAB D: SECURITY & PIN
+        # SUBTAB D: TECHNICAL ARCHITECTURE (RESERVED FOR STAFF/ENGINEERS)
+        with adm_sub_arch:
+            st.markdown("##### 🏛️ Technical Pipeline Architecture (95%+ Accuracy)")
+            st.markdown("""
+            ```
+            [Input Photo]
+                 │
+                 ▼
+            [Layer 1: Preprocessing] ──▶ EXIF Orientation Transpose, RGB Normalization, Contrast Boost
+                 │
+                 ▼
+            [SQLite Cache Check] ──────▶ 0.001s MD5 Signature Lookup (Instant Recall)
+                 │ (Cache Miss)
+                 ▼
+            [Layer 2: Cloud Extraction]▶ Gemini Flash Vision structured JSON mode (Title, Author, Volume, ISBN)
+                 │
+                 ▼
+            [Layer 3: Fuzzy Candidate] ─▶ Rapidfuzz token_set_ratio (70% Title, 30% Author) Top 5 Candidates
+                 │
+                 ▼
+            [Layer 4: Visual Verify] ──▶ Gemini visual comparison against candidate list to pick matching ID
+                 │
+                 ▼
+            [Result / Fallback] ────────▶ Persist into SQLite match_cache & render dual comparison card
+            ```
+            """)
+
+        # SUBTAB E: SECURITY & PIN
         with adm_sub_sec:
             st.markdown("##### 🛡️ Change Admin Passcode")
             new_pin_1 = st.text_input("New Admin Passcode:", type="password", key="adm_new_pin1")
