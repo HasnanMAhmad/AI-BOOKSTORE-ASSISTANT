@@ -54,8 +54,22 @@ def init_db(catalog_dir=None):
     );
     """)
 
+    # 3. Customer Inquiries & Chat Logs table (stores all questions asked to the AI concierge)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS chat_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id TEXT,
+        book_title TEXT,
+        user_question TEXT NOT NULL,
+        ai_response TEXT NOT NULL,
+        timestamp REAL,
+        created_at TEXT
+    );
+    """)
+
     # Index for rapid retrieval
     cur.execute("CREATE INDEX IF NOT EXISTS idx_series ON books(series);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_chat_book ON chat_logs(book_id);")
     conn.commit()
 
     # Seed from catalog folder if books table is empty
@@ -228,6 +242,45 @@ def get_cache_count():
     cnt = cur.fetchone()[0]
     conn.close()
     return cnt
+
+def log_chat_inquiry(book_id, book_title, question, response):
+    """Permanently logs a customer question and AI answer to SQLite."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    now_ts = time.time()
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_ts))
+    cur.execute("""
+    INSERT INTO chat_logs (book_id, book_title, user_question, ai_response, timestamp, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """, (book_id or "unknown", book_title or "General Inquiry", question, response, now_ts, now_str))
+    conn.commit()
+    conn.close()
+
+def get_all_chat_inquiries(limit=100):
+    """Retrieves customer questions and responses ordered newest first."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM chat_logs ORDER BY id DESC LIMIT ?", (limit,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+def get_inquiry_count():
+    """Counts total logged inquiries."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM chat_logs;")
+    cnt = cur.fetchone()[0]
+    conn.close()
+    return cnt
+
+def clear_chat_inquiries():
+    """Clears all stored inquiries."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM chat_logs;")
+    conn.commit()
+    conn.close()
 
 # Auto-initialize on import
 init_db(os.path.join(os.path.dirname(__file__), "catalog"))

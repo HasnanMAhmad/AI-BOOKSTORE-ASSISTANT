@@ -609,6 +609,17 @@ with tab_scanner:
                         )
                         st.write(reply)
                         st.session_state.chat_history.append({"role": "assistant", "content": reply})
+                        
+                        # Permanently log customer inquiry to SQLite database
+                        try:
+                            db.log_chat_inquiry(
+                                book_id=top.get("id"),
+                                book_title=top.get("title"),
+                                question=user_msg,
+                                response=reply
+                            )
+                        except Exception:
+                            pass
         else:
             st.markdown("---")
             st.warning("🔍 **Book not currently recognized in the active store catalog.**")
@@ -747,10 +758,11 @@ with tab_admin:
 
         st.markdown("---")
 
-        adm_sub_ai, adm_sub_ingest, adm_sub_cache, adm_sub_arch, adm_sub_sec = st.tabs([
+        adm_sub_ai, adm_sub_ingest, adm_sub_cache, adm_sub_inquiries, adm_sub_arch, adm_sub_sec = st.tabs([
             "🔑 Cloud AI & API Keys",
             "➕ Ingest New Books",
             "⚡ Cache & Database",
+            "💬 Customer Inquiries",
             "🏛️ Technical Architecture",
             "🛡️ Security & PIN"
         ])
@@ -834,7 +846,33 @@ with tab_admin:
                     st.success("Catalog index reloaded in 0.001s!")
                     st.rerun()
 
-        # SUBTAB D: TECHNICAL ARCHITECTURE (RESERVED FOR STAFF/ENGINEERS)
+        # SUBTAB D: CUSTOMER QUESTIONS & INQUIRIES
+        with adm_sub_inquiries:
+            st.markdown("##### 💬 Logged Customer Questions & Inquiries")
+            total_inq = getattr(db, 'get_inquiry_count', lambda: 0)()
+            st.write(f"Total questions recorded in SQLite: **`{total_inq}`**")
+
+            c_inq_r, c_inq_c = st.columns(2)
+            with c_inq_r:
+                if st.button("🔄 Refresh Inquiries", key="admin_btn_refresh_inq"):
+                    st.rerun()
+            with c_inq_c:
+                if st.button("🗑️ Clear Inquiry Logs", key="admin_btn_clear_inq"):
+                    db.clear_chat_inquiries()
+                    st.success("All customer inquiries cleared.")
+                    st.rerun()
+
+            inquiries = db.get_all_chat_inquiries(limit=100)
+            if not inquiries:
+                st.info("No questions logged yet. When visitors ask the concierge questions after scanning a book, they will appear here live!")
+            else:
+                st.caption(f"Showing newest {len(inquiries)} customer questions:")
+                for inq in inquiries:
+                    with st.expander(f"📖 {inq.get('book_title', 'Book')} • 🕒 {inq.get('created_at', '')}"):
+                        st.markdown(f"**Customer Asked:**\n> {inq.get('user_question')}")
+                        st.markdown(f"**Concierge Answered:**\n{inq.get('ai_response')}")
+
+        # SUBTAB E: TECHNICAL ARCHITECTURE (RESERVED FOR STAFF/ENGINEERS)
         with adm_sub_arch:
             st.markdown("##### 🏛️ Technical Pipeline Architecture (95%+ Accuracy)")
             st.markdown("""
