@@ -117,13 +117,18 @@ class BookstoreConcierge:
                 print(f"[ChatBrain] Model {m_name} notice: {e}")
                 continue
 
-    def ask(self, user_msg: str, user_progress: str = None, top: dict = None, conversation_history: list = None, **kwargs) -> str:
+    def ask(self, user_msg: str = None, user_progress: str = None, top: dict = None, conversation_history: list = None, **kwargs) -> str:
         """
         Sends user message to Gemini with strict spoiler-free rules.
-        Polymorphic: supports concierge.ask(user_msg, top) or concierge.ask(user_msg, user_progress="Chapter 3").
+        Polymorphic: supports concierge.ask(user_msg, top), concierge.ask(top, user_msg),
+        concierge.ask(user_msg, user_progress="Chapter 3"), or named kwargs.
         """
         book_info = top
-        if isinstance(user_progress, dict):
+        if isinstance(user_msg, dict):
+            # Passed book_info as the first positional argument
+            book_info = user_msg
+            user_msg = user_progress if isinstance(user_progress, str) else kwargs.get("user_msg", "")
+        elif isinstance(user_progress, dict):
             book_info = user_progress
             user_progress = kwargs.get("user_progress") or kwargs.get("progress")
         elif isinstance(top, str):
@@ -137,7 +142,7 @@ class BookstoreConcierge:
 
         return self.generate_response(
             book_info=book_info,
-            user_message=user_msg,
+            user_message=user_msg or "",
             conversation_history=conversation_history,
             user_progress=user_progress,
         )
@@ -182,7 +187,9 @@ class BookstoreConcierge:
                 # Build conversation string
                 lines = []
                 if conversation_history:
-                    for turn in conversation_history[-6:]:
+                    # Deduplicate if user_message was already appended to history before calling ask()
+                    history_turns = conversation_history[:-1] if (conversation_history and conversation_history[-1].get("content") == user_message) else conversation_history
+                    for turn in history_turns[-6:]:
                         role = "USER" if turn["role"] == "user" else "ASSISTANT"
                         lines.append(f"{role}: {turn['content']}")
                 lines.append(f"USER: {prompt_content}")
