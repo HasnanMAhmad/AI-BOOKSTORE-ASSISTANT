@@ -640,18 +640,20 @@ Respond ONLY with valid JSON in this exact schema:
             results.append(book)
 
         top_match = results[0] if results else None
-        is_confident = (top_match["confidence_pct"] >= 40.0) if top_match else False
+        is_confident = (top_match["confidence_pct"] >= 35.0) if top_match else False
 
-        # Cache in SQLite database
+        # Cache in SQLite database only if confident
         if top_match and is_confident:
             db.set_cached_match(img_hash, top_match["id"], top_match["confidence_pct"], engine="fast_local", details={"ocr_text": ocr_text})
 
         return {
-            "top_match": top_match,
-            "all_matches": results,
+            "top_match": top_match if is_confident else None,
+            "all_matches": results if is_confident else [],
+            "candidates": results,
             "is_confident": is_confident,
             "ocr_text": ocr_text,
             "elapsed_sec": elapsed_sec,
+            "status": "matched" if is_confident else "not_found",
         }
 
     def learn_user_correction(self, image_input, correct_book_id):

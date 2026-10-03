@@ -487,15 +487,22 @@ with tab_scanner:
             with st.spinner("🔍 Reading book cover and checking store catalog..."):
                 match_result = matcher.match_book(image_bytes, api_key=api_key)
                 st.session_state.match_result = match_result
-                st.session_state.current_book = match_result.get("top_match")
+                st.session_state.current_book = match_result.get("top_match") if match_result.get("is_confident") else None
                 st.session_state.chat_history = []
 
     # Display Recognition Result
     if st.session_state.match_result:
         match_result = st.session_state.match_result
         top = st.session_state.get("current_book") or match_result.get("top_match")
+        is_confident_match = bool(
+            top and (
+                match_result.get("is_confident", False)
+                or match_result.get("from_cache", False)
+                or top.get("confidence_pct", 0) >= 35.0
+            )
+        )
 
-        if top:
+        if is_confident_match and top:
             st.markdown("---")
             col_photo, col_catalog_cover, col_meta = st.columns([1.1, 1.1, 2.8])
 
@@ -624,7 +631,7 @@ with tab_scanner:
             st.markdown("---")
             st.warning("🔍 **Book not currently recognized in the active store catalog.**")
             extracted = match_result.get("extracted_meta") or match_result.get("extracted_metadata")
-            if extracted:
+            if extracted and extracted.get("title"):
                 st.info(
                     f"**Detected details from book cover:**\n\n"
                     f"• **Title:** {extracted.get('title') or 'Unknown'}\n"
@@ -632,6 +639,13 @@ with tab_scanner:
                     f"• **Volume / Edition:** {extracted.get('edition_or_volume') or 'N/A'}\n"
                     f"• **ISBN:** {extracted.get('isbn') or 'N/A'}\n\n"
                     f"💡 *Store staff can easily index this book into the database via the **Staff & Admin Portal**!*"
+                )
+            else:
+                st.info(
+                    "💡 **Tips for best results:**\n\n"
+                    "• Hold the book flat and steady in good room lighting.\n"
+                    "• Ensure the title and author on the front cover are clearly visible.\n"
+                    "• Or tap any of the **Sample Books** above to test instant recognition!"
                 )
 
 # =====================================================================
@@ -682,7 +696,7 @@ with tab_catalog:
 
                     if st.button(f"💬 Consult Concierge", key=f"btn_chat_cat_{book['id']}", use_container_width=True):
                         st.session_state.current_book = book
-                        st.session_state.match_result = {"top_match": book, "all_matches": [book], "from_cache": True}
+                        st.session_state.match_result = {"top_match": book, "all_matches": [book], "from_cache": True, "is_confident": True}
                         st.session_state.chat_history = [
                             {"role": "assistant", "content": f"Welcome! You're inquiring about **{book['title']}** by {book['author']}. How can I assist your reading journey today without any spoilers?"}
                         ]
@@ -712,7 +726,7 @@ with tab_roadmaps:
                 with r_c3:
                     if st.button("💬 Discuss Book", key=f"rdm_btn_{b['id']}", use_container_width=True):
                         st.session_state.current_book = b
-                        st.session_state.match_result = {"top_match": b, "all_matches": [b], "from_cache": True}
+                        st.session_state.match_result = {"top_match": b, "all_matches": [b], "from_cache": True, "is_confident": True}
                         st.session_state.chat_history = [
                             {"role": "assistant", "content": f"Ready to discuss **{b['title']}** (#{idx} in the Dune roadmap)! What would you like to know?"}
                         ]
@@ -740,7 +754,7 @@ with tab_admin:
         with pin_col2:
             input_pin = st.text_input("Admin Passcode / PIN:", type="password", placeholder="Enter PIN (Default: admin123)", key="admin_pin_input")
             if st.button("🔓 Unlock Admin Portal", use_container_width=True, key="btn_unlock_admin"):
-                if input_pin == current_admin_pin or input_pin == "admin123":
+                if input_pin == current_admin_pin:
                     st.session_state.admin_authenticated = True
                     st.success("Access granted.")
                     st.rerun()
