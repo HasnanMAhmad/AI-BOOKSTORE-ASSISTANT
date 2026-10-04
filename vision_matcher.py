@@ -2,7 +2,7 @@
 Ultra-Fast Zero-Lag Book Vision Matcher for Bookstore AI.
 Architecture:
 1. Instant Database Cache: 0.001s lookup from SQLite match_cache table.
-2. Cloud Multimodal AI: Google Gemini (gemini-3.6-flash / 2.5 / 2.0 / 1.5) offloads 100% compute to Google Cloud (0.6s).
+2. Cloud Multimodal AI: Google Gemini (gemini-3.5-flash-lite / 3.6-flash / 3.8-flash) offloads 100% compute to Google Cloud.
 3. Ultra-Fast Local Engine: Native Windows OCR (30ms) + 3D Color Histogram (12ms) + Tokenizer (1ms) = 50ms total.
 Zero startup lag, zero PyTorch CPU freeze, zero laptop overheating!
 """
@@ -215,6 +215,7 @@ Respond in strict JSON with this exact schema:
             candidate_models = [
                 "gemini-3.5-flash-lite",
                 "gemini-3.6-flash",
+                "gemini-3.8-flash",
             ]
 
             img_copy = pil_image.copy()
@@ -362,6 +363,7 @@ Respond ONLY with valid JSON in this exact schema:
             candidate_models = [
                 "gemini-3.5-flash-lite",
                 "gemini-3.6-flash",
+                "gemini-3.8-flash",
             ]
 
             img_copy = pil_image.copy()

@@ -362,12 +362,92 @@ st.markdown("""
 # =====================================================================
 # NAVIGATION TABS
 # =====================================================================
-tab_scanner, tab_catalog, tab_roadmaps, tab_admin = st.tabs([
+MAIN_TABS = [
     "📷 Scan a Book",
     "📚 Store Catalog & Inventory",
     "🗺️ Universe Roadmaps",
     "🔐 Staff & Admin Portal"
-])
+]
+
+if "main_navigation_tabs" not in st.session_state:
+    st.session_state.main_navigation_tabs = MAIN_TABS[0]
+
+try:
+    tab_scanner, tab_catalog, tab_roadmaps, tab_admin = st.tabs(
+        MAIN_TABS,
+        key="main_navigation_tabs"
+    )
+except TypeError:
+    tab_scanner, tab_catalog, tab_roadmaps, tab_admin = st.tabs(MAIN_TABS)
+
+# =====================================================================
+# INTERACTIVE INLINE / MODAL CONCIERGE DIALOG
+# =====================================================================
+if hasattr(st, "dialog"):
+    @st.dialog("🧙‍♂️ Alexandria Literary Concierge", width="large")
+    def open_concierge_dialog(book):
+        col_cov, col_details = st.columns([1, 2.5])
+        with col_cov:
+            img_p = book.get("image_path", "")
+            if img_p and os.path.exists(img_p):
+                st.image(img_p, use_container_width=True)
+            else:
+                st.markdown("<div style='height:140px; background:#F1F5F9; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#94A3B8;'>📖 No Cover</div>", unsafe_allow_html=True)
+        with col_details:
+            st.markdown(f"### {book['title']}")
+            year_str = f"({book['year']})" if book.get('year') else ""
+            st.markdown(f"by **{book['author']}** {year_str}")
+            if book.get("series") and book["series"] != "Standalone":
+                st.markdown(f"<span class='badge-pill badge-universe'>🪐 {book['series']} • {book.get('series_part', 'Volume')}</span>", unsafe_allow_html=True)
+            st.caption("🛡️ Strictly Spoiler-Free Reading Guide • In-Store Concierge")
+
+        st.markdown("---")
+        st.caption("Quick Questions (Tap to ask immediately):")
+        q1, q2, q3, q4 = st.columns(4)
+        quick_query = None
+        bid = book.get("id", "item")
+        if q1.button("🎭 Vibe & Genre", key=f"dlg_q1_{bid}", use_container_width=True):
+            quick_query = f"What is the reading vibe and genre breakdown of {book['title']}?"
+        if q2.button("🗺️ Read Standalone?", key=f"dlg_q2_{bid}", use_container_width=True):
+            quick_query = f"Can I read {book['title']} without reading other books in the universe first?"
+        if q3.button("⚡ Pacing", key=f"dlg_q3_{bid}", use_container_width=True):
+            quick_query = f"What is the narrative pacing, tone, and complexity of {book['title']}?"
+        if q4.button("🔥 Why Loved?", key=f"dlg_q4_{bid}", use_container_width=True):
+            quick_query = f"Why is {book['title']} so highly regarded, and who would enjoy it most?"
+
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "📖"):
+                st.write(msg["content"])
+
+        dialog_input = st.chat_input("Ask a spoiler-free question about this book...", key=f"dlg_input_{bid}")
+        user_msg = dialog_input or quick_query
+
+        if user_msg:
+            st.session_state.chat_history.append({"role": "user", "content": user_msg})
+            with st.chat_message("user", avatar="👤"):
+                st.write(user_msg)
+
+            with st.chat_message("assistant", avatar="📖"):
+                with st.spinner("Concierge reviewing literary archives..."):
+                    reply = concierge.ask(
+                        user_msg=user_msg,
+                        top=book,
+                        conversation_history=st.session_state.chat_history,
+                    )
+                    st.write(reply)
+                    st.session_state.chat_history.append({"role": "assistant", "content": reply})
+
+                    try:
+                        db.log_chat_inquiry(book.get("id", "catalog_book"), user_msg, reply)
+                    except Exception:
+                        pass
+            st.rerun()
+
+        st.markdown("---")
+        if st.button("📷 Open in Full Scanner Tab", key=f"dlg_to_scan_{bid}", use_container_width=True):
+            st.session_state.main_navigation_tabs = MAIN_TABS[0]
+            st.rerun()
+
 
 # =====================================================================
 # TAB 1: SCAN A BOOK (CLEAN, INTERESTING & INTERACTIVE)
@@ -376,19 +456,42 @@ with tab_scanner:
     col_scanner_pane, col_interactive_pane = st.columns([1.6, 1.4])
 
     with col_scanner_pane:
-        st.markdown("""
-        <div class="scanner-header-bar">
-            <span>📸</span> Scan or Upload Book Cover
-        </div>
-        """, unsafe_allow_html=True)
+        hdr_col1, hdr_col2 = st.columns([2.6, 1.4])
+        with hdr_col1:
+            st.markdown("""
+            <div class="scanner-header-bar">
+                <span>📸</span> Scan or Upload Book Cover
+            </div>
+            """, unsafe_allow_html=True)
+        with hdr_col2:
+            if st.button("🔄 Reset / Clear", key="btn_clear_viewfinder", use_container_width=True, help="Reset viewfinder, clear camera snapshot and file uploader"):
+                st.session_state.uploader_version = st.session_state.get("uploader_version", 0) + 1
+                st.session_state.last_image_hash = None
+                st.session_state.current_image_bytes = None
+                st.session_state.match_result = None
+                st.session_state.current_book = None
+                st.session_state.chat_history = []
+                st.rerun()
 
-        scan_subtab_mobile, scan_subtab_file, scan_subtab_cam = st.tabs([
+        SCAN_SUBTABS = [
             "📱 Phone Camera (Snap Live)",
             "📁 Upload Image File",
             "💻 Laptop Webcam"
-        ])
+        ]
 
-        image_source = None
+        try:
+            scan_subtab_mobile, scan_subtab_file, scan_subtab_cam = st.tabs(
+                SCAN_SUBTABS,
+                on_change="rerun",
+                key="scanner_active_subtab"
+            )
+        except TypeError:
+            scan_subtab_mobile, scan_subtab_file, scan_subtab_cam = st.tabs(SCAN_SUBTABS)
+
+        uploader_ver = st.session_state.get("uploader_version", 0)
+        mob_img = None
+        file_img = None
+        cam_img = None
 
         with scan_subtab_mobile:
             st.markdown("""
@@ -402,28 +505,34 @@ with tab_scanner:
             mob_img = st.file_uploader(
                 "Snap cover with phone camera:",
                 type=["jpg", "jpeg", "png", "webp"],
-                key="mob_shot",
+                key=f"mob_shot_{uploader_ver}",
                 label_visibility="collapsed"
             )
-            if mob_img is not None:
-                image_source = mob_img
 
         with scan_subtab_file:
             st.caption("Drag and drop any picture of a book cover from your device:")
             file_img = st.file_uploader(
                 "Upload cover file:",
                 type=["jpg", "jpeg", "png", "webp"],
-                key="file_shot",
+                key=f"file_shot_{uploader_ver}",
                 label_visibility="collapsed"
             )
-            if file_img is not None:
-                image_source = file_img
 
         with scan_subtab_cam:
             st.caption("💻 Webcams work directly on laptop browsers:")
-            cam_img = st.camera_input("Laptop webcam scanner:", key="cam_shot", label_visibility="collapsed")
-            if cam_img is not None:
-                image_source = cam_img
+            cam_img = st.camera_input("Laptop webcam scanner:", key=f"cam_shot_{uploader_ver}", label_visibility="collapsed")
+
+        # Determine active image source strictly based on the active sub-tab
+        active_sub = st.session_state.get("scanner_active_subtab", "📱 Phone Camera (Snap Live)")
+        image_source = None
+        if active_sub == "💻 Laptop Webcam":
+            image_source = cam_img
+        elif active_sub == "📁 Upload Image File":
+            image_source = file_img
+        elif active_sub == "📱 Phone Camera (Snap Live)":
+            image_source = mob_img
+        else:
+            image_source = file_img or mob_img or cam_img
 
     with col_interactive_pane:
         st.markdown("""
@@ -700,7 +809,11 @@ with tab_catalog:
                         st.session_state.chat_history = [
                             {"role": "assistant", "content": f"Welcome! You're inquiring about **{book['title']}** by {book['author']}. How can I assist your reading journey today without any spoilers?"}
                         ]
-                        st.success(f"Loaded '{book['title']}'! Switch to the 📷 Scan a Book tab to chat.")
+                        if hasattr(st, "dialog"):
+                            open_concierge_dialog(book)
+                        else:
+                            st.session_state.main_navigation_tabs = MAIN_TABS[0]
+                            st.rerun()
 
 # =====================================================================
 # TAB 3: UNIVERSE ROADMAPS & CHRONOLOGY
@@ -730,7 +843,11 @@ with tab_roadmaps:
                         st.session_state.chat_history = [
                             {"role": "assistant", "content": f"Ready to discuss **{b['title']}** (#{idx} in the Dune roadmap)! What would you like to know?"}
                         ]
-                        st.success("Loaded! Switch to 📷 Scan a Book tab.")
+                        if hasattr(st, "dialog"):
+                            open_concierge_dialog(b)
+                        else:
+                            st.session_state.main_navigation_tabs = MAIN_TABS[0]
+                            st.rerun()
 
 # =====================================================================
 # TAB 4: STAFF & ADMIN PORTAL (SECURE GATEWAY & TECHNICAL ARCHITECTURE)
